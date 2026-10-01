@@ -1,0 +1,22 @@
+.env
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Runtime artifacts
+data/*.db
+data/**/*.parquet
+logs/
+reports/
+KILL_SWITCH
+*.log
+
+# Keep directory placeholders
+!data/.gitkeep
+!logs/.gitkeep
+!reports/.gitkeep
