@@ -11,11 +11,12 @@ the same code path, preventing divergence (spec section 59).
 
 from __future__ import annotations
 
+import bisect
 import math
 import threading
 from dataclasses import dataclass
-from datetime import datetime
-from typing import Optional
+from datetime import datetime, timedelta
+from typing import Optional, Sequence
 
 from app.core.enums import Timeframe
 from app.core.types import Candle, FeatureSnapshot, ensure_utc
@@ -52,11 +53,27 @@ class FeatureStore:
         self._candles = candles
         self._lock = threading.RLock()
         self._cache: dict[tuple[str, str], _CacheEntry] = {}
+        # Cached, sorted timestamps per (symbol, timeframe) for O(log n)
+        # as-of lookups. Cleared alongside the frame cache.
+        self._times: dict[tuple[str, str], list[datetime]] = {}
+
+    @staticmethod
+    def _peek(candles: CandleStore, symbol: str, timeframe: Timeframe) -> Sequence[Candle]:
+        """Non-copying read of a series on hot paths.
+
+        ``CandleStore.get`` returns a full copy (O(n) per call); ``peek`` returns
+        the live read-only list so per-bar reads stay O(1). Falls back to ``get``
+        for any store that does not implement ``peek``.
+        """
+        peek = getattr(candles, "peek", None)
+        if callable(peek):
+            return peek(symbol, timeframe)
+        return candles.get(symbol, timeframe)
 
     # -- frame computation ----------------------------------------------
     def _frame(self, symbol: str, timeframe: Timeframe) -> _CacheEntry:
         key = (symbol, str(timeframe))
-        bars = self._candles.get(symbol, timeframe)
+        bars = self._peek(self._candles, symbol, timeframe)
         with self._lock:
             entry = self._cache.get(key)
             last_ts = bars[-1].timestamp if bars else None
@@ -71,10 +88,14 @@ class FeatureStore:
         with self._lock:
             if symbol is None:
                 self._cache.clear()
+                self._times.clear()
             else:
                 for key in list(self._cache):
                     if key[0] == symbol:
                         del self._cache[key]
+                for key in list(self._times):
+                    if key[0] == symbol:
+                        del self._times[key]
 
     # -- snapshot builders ----------------------------------------------
     @staticmethod
@@ -103,7 +124,7 @@ class FeatureStore:
     ) -> FeatureSnapshot:
         """Snapshot for a specific bar index (used by the backtester)."""
         entry = self._frame(symbol, timeframe)
-        bars = self._candles.get(symbol, timeframe)
+        bars = self._peek(self._candles, symbol, timeframe)
         if bars and 0 <= index < len(bars):
             ts = ensure_utc(bars[index].timestamp)
         else:
@@ -144,10 +165,18 @@ class FeatureStore:
         reference: str,
         timeframe: Timeframe,
         lookback_bars: int = 4,
+        as_of: Optional[datetime] = None,
     ) -> Optional[float]:
-        """asset return over N bars minus reference return over N bars."""
-        asset = self._candles.get(symbol, timeframe)
-        ref = self._candles.get(reference, timeframe)
+        """Asset return over N bars minus reference return over N bars.
+
+        When ``as_of`` is supplied the return is anchored to the latest CLOSED
+        bar at or before that instant. This is required in backtests where the
+        whole series is pre-loaded: without it, ``bars[-1]`` would expose bars
+        from the future. When ``as_of`` is ``None`` the most recent stored bar is
+        used (the live-loop behaviour).
+        """
+        asset = self._asof_bars(symbol, timeframe, as_of)
+        ref = self._asof_bars(reference, timeframe, as_of)
         if len(asset) <= lookback_bars or len(ref) <= lookback_bars:
             return None
         a_ret = _ret(asset, lookback_bars)
@@ -155,6 +184,28 @@ class FeatureStore:
         if a_ret is None or r_ret is None:
             return None
         return a_ret - r_ret
+
+    def _asof_bars(
+        self, symbol: str, timeframe: Timeframe, as_of: Optional[datetime]
+    ) -> list[Candle]:
+        """Bars up to the last one that has fully CLOSED at ``as_of``."""
+        bars = self._peek(self._candles, symbol, timeframe)
+        if as_of is None or not bars:
+            return bars
+        times = self._times_for(symbol, timeframe, bars)
+        cutoff = ensure_utc(as_of) - timedelta(seconds=timeframe.seconds)
+        return bars[: bisect.bisect_right(times, cutoff)]
+
+    def _times_for(
+        self, symbol: str, timeframe: Timeframe, bars: Sequence[Candle]
+    ) -> list[datetime]:
+        key = (symbol, str(timeframe))
+        with self._lock:
+            times = self._times.get(key)
+            if times is None or len(times) != len(bars):
+                times = [b.timestamp for b in bars]
+                self._times[key] = times
+            return times
 
 
 def _ret(bars: list[Candle], lookback: int) -> Optional[float]:

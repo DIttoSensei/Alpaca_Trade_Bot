@@ -44,6 +44,17 @@ class CandleStore:
     def append(self, candle: Candle) -> None:
         self.merge([candle])
 
+    def peek(self, symbol: str, timeframe: Timeframe) -> Sequence[Candle]:
+        """Read-only view of the stored series WITHOUT copying.
+
+        ``get`` returns a fresh list (an O(n) copy); ``peek`` returns the live
+        internal list. Callers must treat it as read-only. Used on hot read paths
+        (e.g. the backtest feature loop) so per-bar reads stay O(1) and the whole
+        run remains O(n).
+        """
+        with self._lock:
+            return self._data.get((symbol, str(timeframe)), [])
+
     # -- read ------------------------------------------------------------
     def get(self, symbol: str, timeframe: Timeframe) -> list[Candle]:
         with self._lock:

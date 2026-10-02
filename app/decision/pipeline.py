@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import bisect
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 from app.config.assets import ContextConfig
@@ -56,20 +56,45 @@ class TradingPipeline:
         self.reference_symbol = reference_symbol
         # Optional veto-only ML meta-filter. Never required for the core stack.
         self.meta_filter = meta_filter
+        # Cached per-(symbol, timeframe) timestamp arrays so higher-timeframe index
+        # resolution stays O(log n) and the overall backtest stays O(n).
+        self._times_cache: dict[tuple[str, str], list[datetime]] = {}
 
     @property
     def ml_active(self) -> bool:
         return self.meta_filter is not None and getattr(self.meta_filter, "enabled", False)
 
     # -- index helpers ---------------------------------------------------
+    def _peek(self, symbol: str, timeframe: Timeframe):
+        """Non-copying series read (hot path); falls back to a copying ``get``."""
+        peek = getattr(self.candles, "peek", None)
+        if callable(peek):
+            return peek(symbol, timeframe)
+        return self.candles.get(symbol, timeframe)
+
+    def _times(self, symbol: str, timeframe: Timeframe, bars) -> list[datetime]:
+        key = (symbol, str(timeframe))
+        times = self._times_cache.get(key)
+        if times is None or len(times) != len(bars):
+            times = [b.timestamp for b in bars]
+            self._times_cache[key] = times
+        return times
+
     def _ctx_index(self, symbol: str, timeframe: Timeframe, at_or_before: datetime) -> int:
-        bars = self.candles.get(symbol, timeframe)
+        """Index of the latest higher-timeframe bar that has fully CLOSED.
+
+        A bar contributes only once its close time (open timestamp + timeframe)
+        is at or before ``at_or_before``. This is what makes pre-loading the whole
+        series safe: a bucket that is still forming at the evaluation time is
+        never visible, so there is no look-ahead.
+        """
+        bars = self._peek(symbol, timeframe)
         if not bars:
             return -1
-        times = [b.timestamp for b in bars]
-        # last bar whose timestamp <= at_or_before (bars are complete buckets)
-        idx = bisect.bisect_right(times, at_or_before) - 1
-        return idx
+        times = self._times(symbol, timeframe, bars)
+        # Only bars whose CLOSE is already in the past may be used.
+        cutoff = at_or_before - timedelta(seconds=timeframe.seconds)
+        return bisect.bisect_right(times, cutoff) - 1
 
     def build_state(
         self,
@@ -127,7 +152,7 @@ class TradingPipeline:
         return state, regime_result
 
     def _recent_returns(self, symbol: str, tf: Timeframe, index: int, n: int = 6) -> list[float]:
-        bars = self.candles.get(symbol, tf)
+        bars = self._peek(symbol, tf)
         out: list[float] = []
         for i in range(max(1, index - n + 1), index + 1):
             if i <= 0 or i >= len(bars):
@@ -151,7 +176,7 @@ class TradingPipeline:
         return out
 
     def _higher_low(self, symbol: str, tf: Timeframe, index: int, lookback: int = 10) -> bool:
-        bars = self.candles.get(symbol, tf)
+        bars = self._peek(symbol, tf)
         if index < lookback * 2 or index >= len(bars):
             return False
         recent_low = min(b.low for b in bars[index - lookback + 1 : index + 1])
@@ -178,7 +203,11 @@ class TradingPipeline:
         if symbol != self.reference_symbol:
             btc_features = self.features.snapshot_at(self.reference_symbol, self.context.execution, btc_index if btc_index is not None else -1, timestamp)
             relative_strength = self.features.relative_strength(
-                symbol, self.reference_symbol, self.context.regime, lookback_bars=4
+                symbol,
+                self.reference_symbol,
+                self.context.regime,
+                lookback_bars=4,
+                as_of=timestamp,
             )
 
         state, regime_result = self.build_state(

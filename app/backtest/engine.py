@@ -45,6 +45,12 @@ class BacktestConfig:
     apply_spread: bool = True
     # Stop a backtest early if equity falls below this fraction of start.
     ruin_fraction: float = 0.5
+    # Pre-load every candle series and compute each feature frame exactly ONCE.
+    # Because all indicators are causal (value at index i depends only on inputs
+    # 0..i) this is value-identical to the old incremental, per-bar recompute, but
+    # turns the backtest from O(n^2) into O(n) (spec section 124). Disable only if
+    # the store must be mutated incrementally during the run for some other test.
+    preload_features: bool = True
 
 
 @dataclass(slots=True)
@@ -151,16 +157,47 @@ class BacktestEngine:
             self.cfg.settings.fees,
         )
 
+        # O(n) pre-warm: load every candle series and compute each feature frame
+        # exactly once, up front. ``snapshot_at(index)`` then reads point-in-time
+        # values with no look-ahead because every indicator is causal. This
+        # replaces the old per-bar ``merge`` + ``invalidate`` (which recomputed
+        # the whole frame after every bar and re-sorted the store -> O(n^2)).
+        self.preloaded = False
+        if self.bt.preload_features:
+            self._preload()
+
+    def _preload(self) -> None:
+        """Merge the full history once and build each feature frame once.
+
+        Higher-timeframe series are pre-aggregated from the execution timeframe
+        so that only COMPLETE buckets exist in the store; the pipeline still only
+        reads a bucket once its close time has passed, preserving no-lookahead.
+        """
+        store = self.stack.candles
+        store._data.clear()  # noqa: SLF001 - engine owns the store lifecycle
+        for symbol, bars in self._exec.items():
+            store.merge(bars)
+            for role in self._htf_roles:
+                htf_bars = [candle for (_close, candle) in self._htf_schedule[symbol][role]]
+                if htf_bars:
+                    store.merge(htf_bars)
+        # One frame computation per (symbol, timeframe): drop the stale cache and
+        # let the next snapshot_at() build it lazily from the complete series.
+        self.stack.features.invalidate()
+        self.preloaded = True
+
     # -- main loop -------------------------------------------------------
     def run(self) -> BacktestResult:
         result = BacktestResult(symbols=sorted(self._exec.keys()))
         if not self._exec:
             return result
 
-        store = self.stack.candles
-        # Reset any prior state on the shared stack.
-        store._data.clear()  # noqa: SLF001 - engine owns the store lifecycle
-        self.stack.features.invalidate()
+        # The store was pre-loaded (and each feature frame computed once) in
+        # __init__, so the run loop only advances pointers. If preloading was
+        # disabled, load the full history once here as a fallback so index-based
+        # snapshot reads stay consistent (this path is still O(n)).
+        if not self.preloaded:
+            self._preload()
         self.sim.reset()
 
         exec_ptr: dict[str, int] = {s: 0 for s in self._exec}
@@ -176,20 +213,20 @@ class BacktestEngine:
         ruin_level = self.bt.starting_equity * self.bt.ruin_fraction
 
         for timestamp, symbol in events:
-            # 1) Release any higher-timeframe candles that have CLOSED.
+            # 1) Higher-timeframe candles are already pre-loaded; the pipeline
+            #    gates them by close time, so nothing needs releasing here.
             self._release_htf(symbol, timestamp, htf_ptr)
 
-            # 2) Advance ALL symbols' execution bars up to `timestamp` so
-            #    cross-symbol reads (BTC reference) stay consistent.
+            # 2) Advance ALL symbols' execution-bar POINTERS up to `timestamp` so
+            #    cross-symbol reads (BTC reference) use the right index. The store
+            #    already holds the full series: no per-bar merge or recompute.
             for sym, bars in self._exec.items():
                 ptr = exec_ptr[sym]
-                merged = False
+                advanced = False
                 while ptr < len(bars) and bars[ptr].timestamp <= timestamp:
-                    store.merge([bars[ptr]])
                     ptr += 1
-                    merged = True
-                if merged:
-                    self.stack.features.invalidate(sym)
+                    advanced = True
+                if advanced:
                     last_exec_index[sym] = ptr - 1
                 exec_ptr[sym] = ptr
 
@@ -240,17 +277,14 @@ class BacktestEngine:
         timestamp: datetime,
         htf_ptr: dict[str, dict[str, int]],
     ) -> None:
-        schedule = self._htf_schedule.get(symbol, {})
-        merged = False
-        for role, series in schedule.items():
-            ptr = htf_ptr[symbol][role]
-            while ptr < len(series) and series[ptr][0] <= timestamp:
-                self.stack.candles.merge([series[ptr][1]])
-                ptr += 1
-                merged = True
-            htf_ptr[symbol][role] = ptr
-        if merged:
-            self.stack.features.invalidate(symbol)
+        """No-op: higher-timeframe candles are pre-loaded in ``_preload``.
+
+        Retention of no-lookahead now lives in ``TradingPipeline._ctx_index``,
+        which only returns a bucket whose CLOSE time is at or before ``timestamp``
+        (completed buckets only). The ``htf_ptr`` argument is kept for signature
+        stability and potential future incremental use.
+        """
+        return None
 
     def _bar_at(self, symbol: str, timestamp: datetime) -> Optional[Candle]:
         bars = self._exec.get(symbol)

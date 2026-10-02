@@ -169,12 +169,21 @@ python scripts/compare.py --days 730 --with-ml
 
 ### Performance note
 
-The backtest engine recomputes the indicator frame when the merged bar count
-changes, so **runtime grows roughly quadratically with the number of bars**.
-For multi-year comparisons on a low-resource VM, prefer to run arms over a
-single pass and keep windows reasonable, or run the comparison on a workstation
-and ship the `reports/` artefacts to the VM. The synthetic self-check uses a
-modest bar count for exactly this reason.
+The backtest engine is **O(n) in the number of bars**. On construction it
+merges the full candle history once and pre-computes the feature frame once per
+`(symbol, timeframe)` (see `BacktestEngine._preload`); the per-bar `run()` loop
+then only advances pointers and resolves as-of snapshots. This is safe because
+every indicator is strictly causal — `out[i]` depends only on inputs `0..i` — so
+computing the whole frame up front and reading `snapshot_at(index)` is identical
+to computing it incrementally, with no look-ahead. `FeatureStore` caches its
+timestamp arrays and uses `bisect` for as-of index resolution, and `CandleStore`
+exposes a non-copying `peek()` view so the hot path does no whole-series copying.
+
+The synthetic self-check and the section-111 comparison now run comfortably on a
+low-resource VM. As a guard, a large history still costs memory proportional to
+the number of bars (the full frame is retained), and the optional walk-forward
+validation re-slices history per window, so prefer a reasonable window count
+when validating multi-year data.
 
 ---
 
@@ -206,8 +215,11 @@ modest bar count for exactly this reason.
 
 ## 7. Known limitations & honest caveats
 
-- **Quadratic backtest cost** as noted above; a pre-computed feature frame per
-  walk-forward slice would remove this.
+- **Backtest memory grows with history.** Runtime is linear in the number of
+  bars, but the full per-symbol feature frame is retained in memory for the run
+  (a deliberate time/memory trade that removes the previous quadratic cost).
+  Walk-forward validation re-slices history per window, so very long histories
+  with many windows remain the heaviest workload.
 - **ML arm is optional** and only appears with `--with-ml` and a trained model;
   it is veto-only and fails open by design.
 - **Synthetic data is not data.** It exists solely to exercise the harness.

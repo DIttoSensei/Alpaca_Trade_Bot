@@ -229,6 +229,12 @@ disabled) an equity-curve chart under `reports/`. Validation options:
 - **Monte Carlo / bootstrap** (`--monte-carlo`) resamples trade returns to
   estimate the probability of profit and of ruin.
 
+The engine is **O(n) in the number of bars**: it pre-computes the indicator frame
+once per `(symbol, timeframe)` up front and the per-bar loop only resolves
+point-in-time snapshots. Because every indicator is causal, this is equivalent to
+recomputing on each bar but with no look-ahead and without the cost. (The full
+frame is held in memory for the run, so memory scales with history.)
+
 Goals are expressed in **risk-adjusted expectancy after realistic costs**, not
 raw win rate.
 
