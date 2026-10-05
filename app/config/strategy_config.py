@@ -41,6 +41,38 @@ class RegimeConfig:
 
 
 @dataclass(slots=True)
+class GridParams:
+    """Grid-trading tunables (spec addendum: grid strategy).
+
+    Grid is stateful across many price levels rather than a single
+    ``evaluate()->Signal`` call, so it gets its own parameter object. It still
+    lives in ``StrategyConfig`` so it is configured alongside every other
+    strategy and inherits the same risk/exposure governance.
+    """
+
+    enabled: bool = True
+    # Number of equal price levels the range is divided into.
+    grid_levels: int = 10
+    # Range half-width in ATRs: upper = ref + ATR*mult, lower = ref - ATR*mult.
+    range_multiplier: float = 2.0
+    # Recompute (cancel + replace) the grid every N execution bars.
+    recenter_interval: int = 96
+    # Fraction of equity committed to the WHOLE grid at once.
+    capital_per_grid: float = 0.15
+    # Max buy levels allowed to be concurrently filled (safety #3).
+    max_filled_levels: int = 5
+    # Adjacent-level gap must clear round-trip cost by at least this multiple.
+    fee_safety_multiple: float = 3.0
+    # ATR period used to size the range.
+    atr_period: int = 14
+    # Slow SMA period on the regime timeframe used as the range centre.
+    reference_sma_period: int = 100
+    # Hard-bound trigger: price beyond the bound by > mult * range width means
+    # the ranging assumption has failed regardless of the regime detector.
+    hard_bound_multiplier: float = 1.5
+
+
+@dataclass(slots=True)
 class StrategyParams:
     """Generic, per-strategy tunables. Keep the count small (spec section 67)."""
 
@@ -60,16 +92,24 @@ class StrategyParams:
 
 @dataclass(slots=True)
 class StrategyConfig:
-    # Master enable switches
-    trend: bool = True
-    breakout: bool = True
-    mean_reversion: bool = True
-    momentum: bool = True
-    recovery: bool = True
+    # Master enable switches.
+    #
+    # The five original strategies are DISABLED by default: all five were
+    # backtested over 730 days of real BTC/ETH/SOL history and confirmed
+    # unprofitable, so the default configuration must not trade them. They
+    # remain fully implemented and can be re-enabled explicitly.
+    trend: bool = False
+    breakout: bool = False
+    mean_reversion: bool = False
+    momentum: bool = False
+    recovery: bool = False
+    # Grid is the only strategy enabled by default.
+    grid: bool = True
 
     # Per-strategy params
     trend_pullback: StrategyParams = field(
         default_factory=lambda: StrategyParams(
+            enabled=False,
             signal_threshold=6.0,
             risk_multiplier=1.0,
             ensemble_weight=1.0,
@@ -78,6 +118,7 @@ class StrategyConfig:
     )
     breakout: StrategyParams = field(
         default_factory=lambda: StrategyParams(
+            enabled=False,
             signal_threshold=6.0,
             risk_multiplier=0.8,
             ensemble_weight=0.9,
@@ -91,6 +132,7 @@ class StrategyConfig:
     )
     mean_reversion: StrategyParams = field(
         default_factory=lambda: StrategyParams(
+            enabled=False,
             signal_threshold=6.0,
             risk_multiplier=0.6,
             ensemble_weight=0.8,
@@ -99,6 +141,7 @@ class StrategyConfig:
     )
     momentum: StrategyParams = field(
         default_factory=lambda: StrategyParams(
+            enabled=False,
             signal_threshold=6.0,
             risk_multiplier=1.0,
             ensemble_weight=1.0,
@@ -107,12 +150,14 @@ class StrategyConfig:
     )
     recovery: StrategyParams = field(
         default_factory=lambda: StrategyParams(
+            enabled=False,
             signal_threshold=6.0,
             risk_multiplier=0.4,
             ensemble_weight=0.7,
             allowed_regimes=(Regime.RECOVERY,),
         )
     )
+    grid: GridParams = field(default_factory=GridParams)
 
     # Category contribution caps (spec section 22)
     category_caps: dict[SignalCategory, float] = field(
@@ -139,19 +184,20 @@ class StrategyConfig:
     max_weight_change_per_update: float = 0.10
     weight_update_cooldown_trades: int = 10
 
-    def all_params(self) -> dict[str, StrategyParams]:
+    def all_params(self) -> dict[str, StrategyParams | GridParams]:
         return {
             "trend_pullback": self.trend_pullback,
             "breakout": self.breakout,
             "mean_reversion": self.mean_reversion,
             "momentum": self.momentum,
             "recovery": self.recovery,
+            "grid": self.grid,
             "legacy_trend_pullback": StrategyParams(
                 signal_threshold=6.0, risk_multiplier=1.0, ensemble_weight=0.0
             ),
         }
 
-    def get(self, name: str) -> StrategyParams | None:
+    def get(self, name: str) -> StrategyParams | GridParams | None:
         return self.all_params().get(name)
 
 

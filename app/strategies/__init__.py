@@ -11,6 +11,7 @@ from app.core.enums import Regime
 from app.core.types import MarketState, Signal
 from app.strategies.base import Capability, ScoreBuilder, Strategy
 from app.strategies.breakout import BreakoutStrategy
+from app.strategies.grid import GridStrategy
 from app.strategies.legacy import LegacyTrendPullbackStrategy
 from app.strategies.mean_reversion import MeanReversionStrategy
 from app.strategies.momentum import MomentumStrategy
@@ -23,16 +24,19 @@ STRATEGY_CLASSES = {
     "mean_reversion": MeanReversionStrategy,
     "momentum": MomentumStrategy,
     "recovery": RecoveryStrategy,
+    "grid": GridStrategy,
     "legacy_trend_pullback": LegacyTrendPullbackStrategy,
 }
 
 # Which strategies may consider each regime (spec section 20). This is derived
 # from capability matrices but stated explicitly for clarity/auditing.
+#
+# Grid is ONLY eligible in RANGE / LOW_VOLATILITY (safety: never grid a trend).
 REGIME_STRATEGY_MAP: dict[Regime, list[str]] = {
     Regime.STRONG_UPTREND: ["trend_pullback", "momentum", "breakout"],
     Regime.WEAK_UPTREND: ["trend_pullback", "momentum", "breakout"],
-    Regime.RANGE: ["mean_reversion", "breakout"],
-    Regime.LOW_VOLATILITY: ["mean_reversion", "breakout"],
+    Regime.RANGE: ["mean_reversion", "breakout", "grid"],
+    Regime.LOW_VOLATILITY: ["mean_reversion", "breakout", "grid"],
     Regime.HIGH_VOLATILITY: ["mean_reversion"],
     Regime.STRONG_DOWNTREND: [],
     Regime.WEAK_DOWNTREND: [],
@@ -43,7 +47,13 @@ REGIME_STRATEGY_MAP: dict[Regime, list[str]] = {
 
 
 def build_strategies(config: StrategyConfig) -> dict[str, Strategy]:
-    """Instantiate enabled strategies with their params."""
+    """Instantiate enabled strategies with their params.
+
+    Grid is EXCLUDED here on purpose: it is stateful across many levels and does
+    not fit the single ``evaluate()->Signal`` ensemble path. It is driven
+    separately by the grid runner (backtest) / dedicated grid management, so it
+    must not be folded into the per-bar streaming ensemble.
+    """
     strategies: dict[str, Strategy] = {}
     switch = {
         "trend_pullback": config.trend,
@@ -51,10 +61,13 @@ def build_strategies(config: StrategyConfig) -> dict[str, Strategy]:
         "mean_reversion": config.mean_reversion,
         "momentum": config.momentum,
         "recovery": config.recovery,
+        "grid": config.grid,
     }
     for name, cls in STRATEGY_CLASSES.items():
         if name == "legacy_trend_pullback":
             continue  # benchmark only; instantiated explicitly
+        if name == "grid":
+            continue  # stateful; driven by the grid runner, not the ensemble
         if not switch.get(name, False):
             continue
         params = config.get(name)
@@ -62,6 +75,11 @@ def build_strategies(config: StrategyConfig) -> dict[str, Strategy]:
             continue
         strategies[name] = cls(params=params)
     return strategies
+
+
+def grid_enabled(config: StrategyConfig) -> bool:
+    """True when the grid strategy is switched on and enabled."""
+    return bool(config.grid) and getattr(config.grid, "enabled", False)
 
 
 def eligible_strategies(regime: Regime, config: StrategyConfig) -> list[str]:
@@ -83,10 +101,12 @@ __all__ = [
     "MeanReversionStrategy",
     "MomentumStrategy",
     "RecoveryStrategy",
+    "GridStrategy",
     "LegacyTrendPullbackStrategy",
     "STRATEGY_CLASSES",
     "REGIME_STRATEGY_MAP",
     "build_strategies",
+    "grid_enabled",
     "eligible_strategies",
     "Signal",
     "MarketState",

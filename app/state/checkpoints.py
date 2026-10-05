@@ -16,6 +16,8 @@ KEY_CIRCUIT_BREAKERS = "circuit_breakers"
 KEY_STRATEGY_WEIGHTS = "strategy_weights"
 KEY_LAST_SYNC = "last_sync"
 KEY_OPEN_POSITION_SNAPSHOT = "open_position_snapshot"
+# Grid ladder state (one entry per symbol under this key).
+KEY_GRID_STATE = "grid_state"
 
 
 class CheckpointStore:

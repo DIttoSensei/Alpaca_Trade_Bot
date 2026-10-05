@@ -42,7 +42,7 @@ modes and operator commands.
 | Indicators (numpy, no TA-Lib) | [`app/indicators/`](crypto-trading-bot/app/indicators/__init__.py) | Complete |
 | Data (store, validator, loader, features) | [`app/data/`](crypto-trading-bot/app/data/feature_store.py) | Complete |
 | Regimes (trend/vol/panic/recovery) | [`app/regimes/`](crypto-trading-bot/app/regimes/detector.py) | Complete |
-| Strategies (5 + legacy) | [`app/strategies/`](crypto-trading-bot/app/strategies/__init__.py) | Complete |
+| Strategies (grid + 5 legacy + benchmark) | [`app/strategies/`](crypto-trading-bot/app/strategies/__init__.py) | Complete |
 | Decision (signal, ensemble, edge, composer) | [`app/decision/`](crypto-trading-bot/app/decision/pipeline.py) | Complete |
 | Risk (sizing, stops, exposure, breakers) | [`app/risk/`](crypto-trading-bot/app/risk/engine.py) | Complete |
 | Execution (planner, manager, monitor, reconcile) | [`app/execution/`](crypto-trading-bot/app/execution/order_planner.py) | Complete |
@@ -53,7 +53,7 @@ modes and operator commands.
 | Live loop & modes | [`app/live/loop.py`](crypto-trading-bot/app/live/loop.py), [`app/main.py`](crypto-trading-bot/app/main.py) | Complete |
 | Optional ML meta-filter + registry | [`app/ml/`](crypto-trading-bot/app/ml/meta_filter.py) | Complete |
 | Operator scripts | [`scripts/`](crypto-trading-bot/scripts/backtest.py) | Complete |
-| Test suite | [`tests/`](crypto-trading-bot/tests/test_indicators.py) | 35 passing |
+| Test suite | [`tests/`](crypto-trading-bot/tests/test_indicators.py) | 55 passing |
 
 ---
 
@@ -61,13 +61,15 @@ modes and operator commands.
 
 ```
 python -m pytest tests -q
-35 passed
+55 passed
 ```
 
 Coverage includes indicator correctness against known values, candle
-validation/dedupe/aggregation, ML feature-vector stability and sanitisation,
-meta-filter veto/fail-open plus save/load, meta-filter training (chronological
-split, lift metrics, guards) and the experiment registry. scikit-learn–dependent
+validation/dedupe/aggregation, backtest indexing/exit labelling, ML
+feature-vector stability and sanitisation, meta-filter veto/fail-open plus
+save/load, meta-filter training (chronological split, lift metrics, guards), the
+experiment registry, and the grid strategy's geometry, fee-viability gate,
+level-cycling correctness, safety caps and durable state. scikit-learn–dependent
 tests skip automatically when the library is absent.
 
 One test was corrected during hardening: `test_ema_tracks_trend_and_length`
@@ -241,7 +243,7 @@ crypto-trading-bot/
 ├── FINAL_REPORT.md           # this document (spec section 111 deliverable)
 ├── app/                      # the whole application (see README layout)
 ├── scripts/                  # backtest, train, paper, reconcile, healthcheck, compare
-├── tests/                    # pytest suite (35 passing)
+├── tests/                    # pytest suite (55 passing)
 └── reports/                  # comparison.json/.txt, experiment registry (runtime)
 ```
 
@@ -256,3 +258,78 @@ MULTI-STRATEGY numbers on real history is a single credentialed command away
 (section 5). The recommended next action is to run that comparison with
 walk-forward enabled, review out-of-sample expectancy after costs, and only then
 progress through paper trading toward live — behind the double lock.
+
+---
+
+## 10. Grid strategy addendum (stateful ladder)
+
+The five original strategies (`trend_pullback`, `breakout`, `mean_reversion`,
+`momentum`, `recovery`) were backtested over 730 days of real BTC/ETH/SOL history
+and confirmed **unprofitable**, so they are now **disabled by default**
+(`enabled=False`). A sixth strategy, **grid**, is enabled by default and lives in
+[`app/strategies/grid.py`](crypto-trading-bot/app/strategies/grid.py:1). It reuses
+the existing stack (feature store, regime detector, `FeeModel`, `RiskConfig`, SQLite
+checkpoint layer) rather than building a parallel system, and is **backtest-only**
+(not wired into live/paper execution).
+
+### Mechanism
+
+- Range centred on the **100-period SMA** of the regime timeframe, half-width
+  `range_multiplier * ATR`: `upper = ref + ATR*m`, `lower = ref - ATR*m`.
+- Divided into `grid_levels` equal rungs (default 10). A resting **buy** sits at
+  each rung below price; a buy at rung *k* is sold **one rung up** (*k+1*); the
+  sell re-arms the buy at *k*. Long-inventory only — a "sell" always exits bought
+  inventory, never a naked short.
+- Operates only in **RANGE / LOW_VOLATILITY**; re-centres on a bar interval or
+  when price leaves the range (inventory is remapped to the nearest new rung so it
+  is never orphaned).
+
+### Safety checks (all non-optional)
+
+| # | Check | Implementation |
+| --- | --- | --- |
+| 1 | Regime-exit flatten **+** hard-bound trigger (price beyond a bound by > `hard_bound_multiplier` × range width ⇒ ranging failed) | `process_bar` / `run_grid_backtest` |
+| 2 | Fee/spread viability: adjacent-level gap must clear round-trip cost by `fee_safety_multiple` (default 3×) or the whole grid is skipped | `fee_safety_ok` + `_recenter` |
+| 3 | Max simultaneously-filled buy levels (`max_filled_levels`, default 5) | `process_bar` down-leg |
+| 4 | Total grid capital respects the existing risk engine's `max_symbol_exposure` exactly (no bypass) | `process_bar` (`portfolio_room`) |
+| 5 | Partial fills / many open orders: delegated to `app/execution/reconciliation.py`, which iterates `client_order_id`-keyed dicts and handles `PARTIALLY_FILLED`, so it scales to dozens of orders per symbol (no change required) | `Reconciler.reconcile` |
+| 6 | Idempotent order IDs: reuses the deterministic `make_client_order_id` scheme | `app/execution/order_planner.py` |
+
+### Backtest fill-ordering assumption (materially affects results)
+
+A bar can span several levels, so close-only evaluation would misorder fills. We
+**must** use each bar's **high AND low**, and because tick data is unavailable we
+resolve intrabar ordering with a documented, conservative convention:
+
+> **`low_first_then_high`** — each bar is assumed to have moved to its **LOW
+> first** (fills buys, low→high, capped by `max_filled_levels`) and then to its
+> **HIGH** (fills sells, high→low). A buy fills only at rungs the descending price
+> actually reached — i.e. `bar.low ≤ rung ≤ bar.open`.
+
+This is the **least favourable** ordering for a range-fade and matches the
+existing simulator's pessimistic intrabar rule (a bar touching both stop and
+target is assumed to have hit the stop first). The alternative (high first) would
+flatter results and is **not** used. The active assumption is recorded on the
+result (`GridPortfolioResult.fill_order`) and asserted in
+[`tests/test_grid.py`](crypto-trading-bot/tests/test_grid.py).
+
+### Configuration
+
+Tunables live in [`GridParams`](crypto-trading-bot/app/config/strategy_config.py:44):
+`grid_levels`, `range_multiplier`, `recenter_interval`, `capital_per_grid`,
+`max_filled_levels`, `fee_safety_multiple` (plus `atr_period`,
+`reference_sma_period`, `hard_bound_multiplier`).
+
+### Running it
+
+```bash
+python scripts/backtest_grid.py --days 730 --equity 10000
+```
+
+[`scripts/backtest_grid.py`](crypto-trading-bot/scripts/backtest_grid.py) runs only
+the grid, prints trade count / net P&L / return %, and emits the required sanity
+checks: hold-time distribution (min/median/max), max single-trade price move %,
+**non-exact-level fills (must be 0)**, unique active trading days (first/last),
+safety-#1 firings (regime-exit flattens, hard-bound triggers), and peak committed
+capital vs the configured cap (safety #4). It degrades to the local parquet cache
+when Alpaca credentials / `alpaca-py` are unavailable.
