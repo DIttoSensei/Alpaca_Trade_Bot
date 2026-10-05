@@ -30,6 +30,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.config import load_config  # noqa: E402
+from app.core.enums import Timeframe  # noqa: E402
+from app.data.candle_store import aggregate  # noqa: E402
 from app.data.historical_loader import ParquetCache  # noqa: E402
 from app.strategies.grid import FILL_ORDER_LOW_FIRST, run_grid_backtest  # noqa: E402
 from scripts._common import load_history  # noqa: E402
@@ -39,24 +41,49 @@ logger = logging.getLogger("scripts.backtest_grid")
 _EXACT_LEVEL_TOL = 1e-6
 
 
-def _load_from_cache(cfg) -> tuple[dict, object]:
+def _load_from_cache(cfg, target_tf: Timeframe | None = None) -> tuple[dict, object]:
     """Offline fallback: read the local parquet cache, no network needed.
 
     Lets the grid backtest be reproduced without alpaca-py / credentials, which
     is exactly when you most want to re-check a suspicious result.
+
+    The cache is keyed by the EXACT timeframe that was downloaded (typically the
+    configured execution timeframe, M15). To honour an ``--execution-timeframe``
+    override offline, we try the exact file first and otherwise aggregate a
+    finer cached series up to ``target_tf`` (e.g. M15 -> H1). This keeps the
+    sweep runnable with no credentials; a live fetch (when available) creates
+    the exact-timeframe file directly.
     """
     cache = ParquetCache(cfg.settings.paths.data)
-    exec_tf = cfg.symbols.execution_timeframe()
+    target = target_tf or cfg.symbols.execution_timeframe()
     by_key: dict = {}
     for symbol in cfg.symbols.enabled():
+        # 1) Exact cached timeframe.
         try:
-            bars = cache.load(symbol, exec_tf)
+            bars = cache.load(symbol, target)
         except Exception as exc:  # noqa: BLE001 - pandas/pyarrow not installed
             logger.warning("cache read failed for %s (%s)", symbol, exc)
-            return {}, exec_tf
+            return {}, target
+        # 2) Otherwise aggregate a finer cached series (M15 -> H1) if present.
+        if not bars:
+            for src in (Timeframe.M5, Timeframe.M15, Timeframe.H1):
+                if src.seconds >= target.seconds:
+                    continue
+                try:
+                    fine = cache.load(symbol, src)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("cache read failed for %s (%s)", symbol, exc)
+                    fine = []
+                if fine:
+                    bars = aggregate(fine, target)
+                    logger.info(
+                        "cache: aggregated %s %s -> %s (%d bars)",
+                        symbol, src, target, len(bars),
+                    )
+                    break
         if bars:
-            by_key[(symbol, exec_tf)] = bars
-    return by_key, exec_tf
+            by_key[(symbol, target)] = bars
+    return by_key, target
 
 
 def _median(values: list[float]) -> float:
@@ -81,6 +108,7 @@ def render_report(result, cfg, *, days: int, exec_tf, equity: float) -> str:
     lines.append("=" * 72)
     lines.append(f"days                : {days}")
     lines.append(f"execution timeframe : {exec_tf}")
+    lines.append(f"fee-safety multiple : {cfg.strategies.grid.fee_safety_multiple:g}x")
     lines.append(f"symbols run         : {sorted(result.per_symbol)}")
     lines.append(f"trades              : {summary['trades']}")
     lines.append(f"net P&L             : {summary['net_pnl']:.2f}")
@@ -138,11 +166,42 @@ def render_report(result, cfg, *, days: int, exec_tf, equity: float) -> str:
     return "\n".join(lines)
 
 
+def _parse_timeframe(value: str) -> Timeframe:
+    """Parse ``--execution-timeframe`` (accepts ``M15``/``m15``/``15m`` or ``H1``/``1h``)."""
+    token = value.strip()
+    by_name = {m.name.upper(): m for m in Timeframe}
+    if token.upper() in by_name:
+        return by_name[token.upper()]
+    try:
+        return Timeframe(token.lower())
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            f"unknown timeframe {value!r}; use one of {[t.name for t in Timeframe]} "
+            f"or {[t.value for t in Timeframe]}"
+        ) from exc
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Backtest the grid strategy in isolation")
     parser.add_argument("--days", type=int, default=730)
     parser.add_argument("--equity", type=float, default=10_000.0)
     parser.add_argument("--symbols", nargs="*", default=None, help="override the universe")
+    parser.add_argument(
+        "--fee-safety-multiple",
+        type=float,
+        default=None,
+        metavar="X",
+        help="override GridParams.fee_safety_multiple: the adjacent-level gap must clear "
+        "X times round-trip cost or the whole grid is skipped (safety #2). Default 3.0.",
+    )
+    parser.add_argument(
+        "--execution-timeframe",
+        type=_parse_timeframe,
+        default=None,
+        metavar="TF",
+        help="override the execution timeframe (e.g. M15 or H1). The grid is primarily "
+        "gated by this timeframe; a coarser one widens the ATR-scaled level spacing.",
+    )
     parser.add_argument("--log-level", default="INFO")
     args = parser.parse_args(argv)
 
@@ -152,11 +211,23 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     cfg = load_config()
+
+    # -- Programmatic overrides (no code change needed) --------------------
+    # Both are applied to the shared BotConfig BEFORE the stack/loader is
+    # built, so the execution context, feature store and the fee gate all
+    # observe the same values.
+    if args.fee_safety_multiple is not None:
+        cfg.strategies.grid.fee_safety_multiple = float(args.fee_safety_multiple)
+        logger.info("override: fee_safety_multiple=%.3gx", args.fee_safety_multiple)
+    if args.execution_timeframe is not None:
+        cfg.symbols.timeframes["execution"] = args.execution_timeframe
+        logger.info("override: execution_timeframe=%s", args.execution_timeframe.value)
+
     try:
         candles_by_key, exec_tf = load_history(cfg, days=args.days, symbols=args.symbols)
     except Exception as exc:  # noqa: BLE001 - missing alpaca-py / offline
         logger.warning("live data fetch unavailable (%s); falling back to local parquet cache", exc)
-        candles_by_key, exec_tf = _load_from_cache(cfg)
+        candles_by_key, exec_tf = _load_from_cache(cfg, args.execution_timeframe)
     if not candles_by_key:
         logger.error("No historical data available (live or cached); nothing to backtest.")
         return 1
