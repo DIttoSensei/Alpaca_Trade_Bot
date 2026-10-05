@@ -196,10 +196,23 @@ class Simulator:
             return []
 
         if stop_hit and target_hit and self.sim.pessimistic_intrabar:
-            return [self._close(pos, pos.stop_price, ExitReason.STOP_LOSS, bar.timestamp, bar)]
+            return [self._close(pos, pos.stop_price, self._stop_reason(pos), bar.timestamp, bar)]
         if target_hit:
             return [self._close(pos, pos.target_price, ExitReason.TAKE_PROFIT, bar.timestamp, bar)]
-        return [self._close(pos, pos.stop_price, ExitReason.STOP_LOSS, bar.timestamp, bar)]
+        return [self._close(pos, pos.stop_price, self._stop_reason(pos), bar.timestamp, bar)]
+
+    @staticmethod
+    def _stop_reason(pos: OpenPosition) -> ExitReason:
+        """Distinguish a trailing/protected exit from an initial stop-out.
+
+        Once a stop has been trailed to breakeven or beyond (``stop_price >=
+        entry_price`` on a long, or ``trailing_state`` is active) hitting it books
+        a profit, not a loss. Labelling it ``TRAILING_STOP`` stops those exits
+        from being misread as "STOP_LOSS showing a gain".
+        """
+        if pos.trailing_state != "none" or pos.stop_price >= pos.entry_price:
+            return ExitReason.TRAILING_STOP
+        return ExitReason.STOP_LOSS
 
     def close_position(
         self,

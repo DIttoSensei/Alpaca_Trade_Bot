@@ -26,6 +26,20 @@ class CandleStore:
         self._data: dict[tuple[str, str], list[Candle]] = defaultdict(list)
         self._max_bars = max_bars
 
+    def set_capacity(self, max_bars: int) -> None:
+        """Raise the retention cap (never lowers it).
+
+        The backtest engine addresses candles by ABSOLUTE index into its own
+        copy of the series; the store must therefore retain the identical
+        series. ``merge`` silently drops the oldest bars past ``max_bars``,
+        which would misalign every ``snapshot_at(index)`` read. The engine calls
+        this once before loading so the whole history is kept. Live keeps its
+        bounded default (only the recent tail is needed there).
+        """
+        with self._lock:
+            if max_bars > self._max_bars:
+                self._max_bars = max_bars
+
     # -- write -----------------------------------------------------------
     def merge(self, candles: Iterable[Candle], update_freshness: bool = True) -> int:
         """Merge candles with dedupe. Returns number of stored bars for the key."""

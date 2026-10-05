@@ -7,11 +7,18 @@ strategy code" that could silently diverge from production (spec sections 59,
 92, 96).
 
 No-lookahead guarantees:
-  * Execution-timeframe bars are merged into the store incrementally, one
-    completed bar at a time, so a strategy can never see the future.
-  * Higher-timeframe (confirmation/regime/macro) bars are aggregated from the
-    base timeframe and only merged once their bucket has fully CLOSED relative
-    to the current evaluation time. A forming H4 candle is never visible.
+  * The full history is pre-loaded once (O(n)), but every decision reads the
+    feature store via ``snapshot_at(index)`` for the bar that closed at the
+    evaluation time — never a later index. Because every indicator is causal,
+    precomputing the frame up front is value-identical to recomputing it bar by
+    bar, with no future leakage (spec section 124).
+  * The store MUST retain the identical series the engine indexes into; the
+    engine sizes it to the full history (``_size_store``) so absolute indices
+    never shift. A capped store would misalign ``snapshot_at`` and expose bars
+    from the future.
+  * Higher-timeframe (confirmation/regime/macro) buckets are aggregated from the
+    base timeframe and the pipeline only reads a bucket once its bucket CLOSE
+    time has passed. A forming H4 candle is never visible.
   * Exits are evaluated with the pessimistic assumption that if a bar touches
     both the stop and the target, the stop filled first.
 
@@ -166,6 +173,27 @@ class BacktestEngine:
         if self.bt.preload_features:
             self._preload()
 
+    def _size_store(self) -> None:
+        """Make the store retain the EXACT series this engine indexes into.
+
+        The run loop addresses candles by ABSOLUTE index into ``self._exec`` (and
+        the aggregated higher timeframes). ``CandleStore.merge`` truncates to
+        ``max_bars`` (default 5000); for histories longer than that the store
+        drops the oldest bars, so ``snapshot_at(index)`` reads the WRONG (future)
+        bar. That produced phantom one-bar price moves and inverted exit labels.
+        Sizing the store to the full history keeps indices aligned; we never ask
+        it to shrink.
+        """
+        store = self.stack.candles
+        longest = 0
+        for symbol, bars in self._exec.items():
+            longest = max(longest, len(bars))
+            for role in self._htf_roles:
+                longest = max(longest, len(self._htf_schedule[symbol][role]))
+        setter = getattr(store, "set_capacity", None)
+        if callable(setter):
+            setter(longest + 1)
+
     def _preload(self) -> None:
         """Merge the full history once and build each feature frame once.
 
@@ -173,6 +201,9 @@ class BacktestEngine:
         so that only COMPLETE buckets exist in the store; the pipeline still only
         reads a bucket once its close time has passed, preserving no-lookahead.
         """
+        # Retention must cover the whole indexed series BEFORE we merge, or the
+        # oldest bars are silently dropped and absolute indices shift.
+        self._size_store()
         store = self.stack.candles
         store._data.clear()  # noqa: SLF001 - engine owns the store lifecycle
         for symbol, bars in self._exec.items():
@@ -375,11 +406,22 @@ def run_backtest(
     backtest: BacktestConfig | None = None,
     collection_timeframe: Timeframe | None = None,
 ) -> BacktestResult:
-    """Convenience entry point used by scripts, walk-forward and Monte Carlo."""
+    """Convenience entry point used by scripts, walk-forward and Monte Carlo.
+
+    Builds a backtest-local stack backed by an UNCAPPED candle store so the
+    absolute indices the engine iterates over stay aligned with what
+    ``snapshot_at`` reads (see ``BacktestEngine._size_store``). This also
+    isolates backtests that share a process (walk-forward windows) from each
+    other and from any live stack.
+    """
+    from app.data.candle_store import CandleStore
+
+    stack = build_stack(config, candles=CandleStore(max_bars=10**9))
     engine = BacktestEngine(
         candles_by_key,
         config=config,
         backtest=backtest,
+        stack=stack,
         collection_timeframe=collection_timeframe,
     )
     return engine.run()

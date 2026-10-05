@@ -92,9 +92,12 @@ def build_meta_filter(cfg: BotConfig):
         return None
 
 
-def build_stack(config: BotConfig | None = None) -> StrategyStack:
+def build_stack(
+    config: BotConfig | None = None,
+    candles: CandleStore | None = None,
+) -> StrategyStack:
     cfg = config or load_config()
-    candles = CandleStore()
+    candles = candles or CandleStore()
     features = FeatureStore(candles)
     strategies = build_strategies(cfg.strategies)
     signal_engine = SignalEngine(strategies, cfg.strategies)
