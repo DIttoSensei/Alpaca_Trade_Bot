@@ -1,0 +1,32 @@
+================================================================================================
+PROFITABILITY & ROBUSTNESS VALIDATION (real cached candles)
+generated: 2026-10-07T17:51:59.461123+00:00   equity: 10,000
+cost model: taker 0.0025 + slip 0.001 + spread 0.0005  => round-trip 0.0065 (0.65%)
+================================================================================================
+
+### EXECUTION TIMEFRAME M15   bars: {'BTC/USD': 69955, 'ETH/USD': 69951, 'SOL/USD': 69984}
+arm                trades    win%      gross        net    ret%     PF  maxDD%  P(prof) P(ruin)
+------------------------------------------------------------------------------------------------
+current_bot           475   30.9%     -1,403     -5,038  -50.38   0.38  50.42%     0.0%  58.00%
+v2_trend_only         356   25.3%     -2,385     -5,003  -50.03   0.31  50.15%     0.0%  54.00%
+v2_multi              356   25.3%     -2,385     -5,003  -50.03   0.31  50.15%     0.0%  54.00%
+only_trend_pullback    356   25.3%     -2,385     -5,003  -50.03   0.31  50.15%     0.0%  54.00%
+only_breakout           0    0.0%          0          0    0.00   0.00   0.00%     0.0%   0.00%
+only_mean_reversion      0    0.0%          0          0    0.00   0.00   0.00%     0.0%   0.00%
+only_momentum         183   23.5%     -1,560     -3,066  -30.66   0.30  30.84%     0.0%   0.00%
+only_recovery           0    0.0%          0          0    0.00   0.00   0.00%     0.0%   0.00%
+grid                   36    0.0%          0        -64   -0.21    inf   0.00%     0.0%   0.00%
+------------------------------------------------------------------------------------------------
+  by-year current_bot      2024: net=-2710 (280t) | 2025: net=-2328 (195t)
+  by-year v2_trend_only    2024: net=-2726 (173t) | 2025: net=-2277 (183t)
+  by-year v2_multi         2024: net=-2726 (173t) | 2025: net=-2277 (183t)
+  by-year only_trend_pullback 2024: net=-2726 (173t) | 2025: net=-2277 (183t)
+  by-year only_momentum    2024: net=-610 (25t) | 2025: net=-1786 (113t) | 2026: net=-669 (45t)
+  grid detail: trades=36 net=-64.26 flattens=26 hardbound=0 peak_committed=600.0
+    BTC/USD   trades=0    fills=0     final= 10,000.00 skipped_recenters=12948
+    ETH/USD   trades=3    fills=3     final=  9,994.66 skipped_recenters=12766
+    SOL/USD   trades=33   fills=38    final=  9,941.08 skipped_recenters=11276
+  v2_multi rejections (total 44449): {'NO_SIGNAL': 34234, 'EXPECTED_EDGE_TOO_SMALL': 7348, 'RELATIVE_STRENGTH_FAILED': 2866, 'BTC_CONFIRMATION_FAILED': 1}
+  v2_multi exit reasons: {'TRAILING_STOP': 51, 'STOP_LOSS': 227, 'TAKE_PROFIT': 78}
+  v2_multi per-strategy: {'trend_pullback': {'trades': 342, 'net_pnl': -4799.5786}, 'momentum': {'trades': 14, 'net_pnl': -203.4201}}
+================================================================================================

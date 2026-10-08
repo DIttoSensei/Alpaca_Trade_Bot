@@ -1,0 +1,15 @@
+==============================================================================
+CACHED DATA INVENTORY
+==============================================================================
+BTC/USD   15m  bars=69955   2024-10-05 -> 2026-10-05  span= 730.0d expected~70080   gaps=101 max_gap_bars=7 dupes=0
+               close min=58,076.75 max=126,117.15 first=61,897.97 last=85,529.42 total_move=+38.2%
+BTC/USD   1h   bars=17518   2024-10-05 -> 2026-10-05  span= 730.0d expected~17520   gaps=2 max_gap_bars=2 dupes=0
+               close min=58,200.65 max=126,117.15 first=62,043.69 last=85,904.79 total_move=+38.5%
+ETH/USD   15m  bars=69951   2024-10-05 -> 2026-10-05  span= 730.0d expected~70080   gaps=99 max_gap_bars=7 dupes=0
+               close min=1,397.22 max=4,940.99 first=2,401.68 last=2,707.90 total_move=+12.8%
+ETH/USD   1h   bars=17518   2024-10-05 -> 2026-10-05  span= 730.0d expected~17520   gaps=2 max_gap_bars=2 dupes=0
+               close min=1,417.74 max=4,933.85 first=2,418.74 last=2,715.34 total_move=+12.3%
+SOL/USD   15m  bars=69984   2024-10-05 -> 2026-10-05  span= 730.0d expected~70080   gaps=48 max_gap_bars=10 dupes=0
+               close min=60.58 max=294.09 first=142.41 last=120.08 total_move=-15.7%
+SOL/USD   1h   ERROR 
+==============================================================================

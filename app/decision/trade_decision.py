@@ -127,18 +127,37 @@ class TradeDecisionComposer:
         if vol_pct is not None and vol_pct >= self.risk.extreme_atr_percentile:
             extreme_vol = True
 
+        strategy = self._dominant_strategy(ensemble)
+        # A cross-timeframe trend trade is sized/stopped on the DAILY ATR (the
+        # timeframe that produced the signal) and exited by trailing, not a fixed
+        # target. Non-trend strategies keep the intraday ATR stop.
+        trend_mode = strategy == "trend_daily"
+        atr_for_stop = atr
+        trend_sma = 0.0
+        if trend_mode:
+            daily = state.context.get("1d")
+            if daily is not None:
+                daily_atr = daily.values.get("atr")
+                if daily_atr and daily_atr > 0:
+                    atr_for_stop = daily_atr
+                daily_sma = daily.values.get("sma50")
+                if daily_sma and daily_sma > 0:
+                    trend_sma = daily_sma
+
         risk_plan = self.risk_engine.plan(
             equity=equity,
             symbol=state.symbol,
             entry_price=price,
             atr=atr,
-            strategy_name=self._dominant_strategy(ensemble),
+            strategy_name=strategy,
             positions=positions,
             return_series=return_series,
             buying_power=buying_power,
             recent_volume=recent_volume,
             base_risk_multiplier=1.0,
             extreme_volatility=extreme_vol,
+            trend_mode=trend_mode,
+            atr_for_stop=atr_for_stop,
         )
         if not risk_plan.allowed:
             reason = risk_plan.reject_reason
@@ -148,7 +167,9 @@ class TradeDecisionComposer:
         assert stop_plan is not None and risk_plan.sizing is not None
 
         # 6) Expected edge / cost filter. Expected move ties to the intended
-        # target distance (stop_distance * R multiple).
+        # target distance (stop_distance * R multiple). A trend trade has no
+        # fixed target price, so ``StopPlan.target_r_multiple`` carries the
+        # nominal horizon used ONLY for this cost comparison.
         expected_move = stop_plan.stop_distance_pct * stop_plan.target_r_multiple
         edge_res = self.edge.evaluate(expected_move, quote=state.quote)
         if not edge_res.passed:
@@ -160,7 +181,6 @@ class TradeDecisionComposer:
                 expected_edge=edge_res.remaining_edge,
             )
 
-        strategy = self._dominant_strategy(ensemble)
         decision = TradeDecision(
             symbol=state.symbol,
             side="buy",
@@ -183,6 +203,9 @@ class TradeDecisionComposer:
                 "stop_distance_pct": stop_plan.stop_distance_pct,
                 "binding_constraint": risk_plan.metadata.get("binding_constraint"),
                 "correlation_scale": risk_plan.correlation_scale,
+                "trend_mode": trend_mode,
+                "trend_atr": atr_for_stop if trend_mode else 0.0,
+                "trend_sma": trend_sma,
             },
         )
         return DecisionOutcome(decision=decision, rejection=None)

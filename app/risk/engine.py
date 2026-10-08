@@ -61,6 +61,8 @@ class RiskEngine:
         recent_volume: float | None = None,
         base_risk_multiplier: float = 1.0,
         extreme_volatility: bool = False,
+        trend_mode: bool = False,
+        atr_for_stop: float | None = None,
     ) -> RiskPlan:
         # 1) Hard breakers block all new entries.
         blocked, why = self.breakers.entries_blocked()
@@ -78,8 +80,13 @@ class RiskEngine:
                 exposure=snap,
             )
 
-        # 3) Stop plan (ATR based).
-        stop_plan = self.stops.initial_stop(entry_price, atr, side="buy")
+        # 3) Stop plan (ATR based). In trend mode the stop may be sized from the
+        #    DAILY ATR (``atr_for_stop``) rather than the execution-timeframe ATR,
+        #    so a cross-timeframe trend stop matches the timeframe that produced
+        #    the signal.
+        stop_plan = self.stops.initial_stop(
+            entry_price, atr_for_stop or atr, side="buy", trend_mode=trend_mode
+        )
 
         # 4) Risk multiplier stack: strategy * breakeven/cooldown * correlation * vol.
         risk_mult = self.strategy_risk_multiplier(strategy_name, base_risk_multiplier)

@@ -50,7 +50,11 @@ class GridParams:
     strategy and inherits the same risk/exposure governance.
     """
 
-    enabled: bool = True
+    # DISABLED BY DEFAULT. Over 730 days of real BTC/ETH/SOL history the grid arm
+    # produced only 36 trades (26 regime flattens) for -64 net: it is inert and
+    # unprofitable, so the shipped default must not trade it. Fully implemented
+    # and re-enable-able for experimentation.
+    enabled: bool = False
     # Number of equal price levels the range is divided into.
     grid_levels: int = 10
     # Range half-width in ATRs: upper = ref + ATR*mult, lower = ref - ATR*mult.
@@ -94,7 +98,7 @@ class StrategyParams:
 class StrategyConfig:
     # Master enable switches.
     #
-    # The five original strategies are DISABLED by default: all five were
+    # The five original intraday strategies are DISABLED by default: all five were
     # backtested over 730 days of real BTC/ETH/SOL history and confirmed
     # unprofitable, so the default configuration must not trade them. They
     # remain fully implemented and can be re-enabled explicitly.
@@ -103,8 +107,16 @@ class StrategyConfig:
     mean_reversion: bool = False
     momentum: bool = False
     recovery: bool = False
-    # Grid is the only strategy enabled by default.
-    grid: bool = True
+    # Grid DISABLED by default: inert and net-negative on real history (see
+    # ``GridParams.enabled``). NOTE: the later ``grid: GridParams`` field shadows
+    # this boolean -- the effective gate is ``config.grid.enabled``.
+    grid: bool = False
+    # The ONE strategy enabled by default: low-turnover DAILY trend following.
+    # This is the only long-only edge that survived realistic costs on real data
+    # (see diagnostics/edge_research.py). It reads the DAILY context, so it trades
+    # ~10x less often than the intraday strategies and lets the trend move
+    # dominate the round-trip cost.
+    daily_trend: bool = True
 
     # Per-strategy params
     trend_pullback: StrategyParams = field(
@@ -158,6 +170,25 @@ class StrategyConfig:
         )
     )
     grid: GridParams = field(default_factory=GridParams)
+    trend_daily: StrategyParams = field(
+        default_factory=lambda: StrategyParams(
+            enabled=True,
+            signal_threshold=6.0,
+            risk_multiplier=1.0,
+            ensemble_weight=1.0,
+            # The daily context needs 200 daily bars for its SMA200 structural
+            # filter (see app/strategies/trend_daily.py).
+            minimum_data=210,
+            allowed_regimes=(
+                Regime.STRONG_UPTREND,
+                Regime.WEAK_UPTREND,
+                Regime.RANGE,
+                Regime.LOW_VOLATILITY,
+                Regime.WEAK_DOWNTREND,
+                Regime.RECOVERY,
+            ),
+        )
+    )
 
     # Category contribution caps (spec section 22)
     category_caps: dict[SignalCategory, float] = field(
@@ -192,6 +223,7 @@ class StrategyConfig:
             "momentum": self.momentum,
             "recovery": self.recovery,
             "grid": self.grid,
+            "trend_daily": self.trend_daily,
             "legacy_trend_pullback": StrategyParams(
                 signal_threshold=6.0, risk_multiplier=1.0, ensemble_weight=0.0
             ),

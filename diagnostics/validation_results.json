@@ -1,0 +1,578 @@
+{
+  "generated_at": "2026-10-07T17:51:59.461123+00:00",
+  "equity": 10000.0,
+  "execution_timeframe": "M15",
+  "fees": {
+    "taker_fee": 0.0025,
+    "slippage": 0.001,
+    "spread": 0.0005,
+    "round_trip_cost": 0.006500000000000001
+  },
+  "scenarios": {
+    "M15": {
+      "tf": "M15",
+      "bars": {
+        "BTC/USD": 69955,
+        "ETH/USD": 69951,
+        "SOL/USD": 69984
+      },
+      "arms": {
+        "current_bot": {
+          "arm": "current_bot",
+          "trades": 475,
+          "gross_pnl": -1403.35,
+          "net_pnl": -5038.08,
+          "return_pct": -50.3808,
+          "cost_drag": 4543.68,
+          "win_rate": 0.3095,
+          "profit_factor": 0.377,
+          "expectancy": -10.6065,
+          "average_win": 20.71,
+          "average_loss": -24.64,
+          "max_dd_pct": 0.5042,
+          "sharpe": -0.455,
+          "fees": 3634.74,
+          "slippage": 908.94,
+          "avg_hold_s": 20495.0,
+          "regime_counts": {
+            "HIGH_VOLATILITY": 6222,
+            "WEAK_DOWNTREND": 6856,
+            "RANGE": 3350,
+            "STRONG_DOWNTREND": 5407,
+            "LOW_VOLATILITY": 2992,
+            "WEAK_UPTREND": 4132,
+            "STRONG_UPTREND": 3473,
+            "PANIC": 20,
+            "RECOVERY": 6
+          },
+          "exit_reasons": {
+            "STOP_LOSS": 284,
+            "TAKE_PROFIT": 135,
+            "TRAILING_STOP": 56
+          },
+          "per_strategy": {
+            "legacy_trend_pullback": {
+              "trades": 475,
+              "net_pnl": -5038.0837
+            }
+          },
+          "n_rejections": 31983,
+          "top_rejections": {
+            "NO_SIGNAL": 31983
+          },
+          "monte_carlo": {
+            "iterations": 500,
+            "starting_equity": 10000.0,
+            "mean_return": -0.48372,
+            "median_return": -0.500236,
+            "p05_return": -0.502686,
+            "p95_return": -0.422263,
+            "prob_profit": 0.0,
+            "prob_ruin": 0.58,
+            "ruin_fraction": 0.5,
+            "median_max_drawdown_pct": 0.5005,
+            "worst_max_drawdown_pct": 0.5099
+          },
+          "by_year": {
+            "2024": {
+              "trades": 280,
+              "net_pnl": -2710.05,
+              "win_rate": 0.3607,
+              "profit_factor": 0.455
+            },
+            "2025": {
+              "trades": 195,
+              "net_pnl": -2328.03,
+              "win_rate": 0.2359,
+              "profit_factor": 0.252
+            }
+          }
+        },
+        "v2_trend_only": {
+          "arm": "v2_trend_only",
+          "trades": 356,
+          "gross_pnl": -2385.05,
+          "net_pnl": -5002.99,
+          "return_pct": -50.0299,
+          "cost_drag": 3271.75,
+          "win_rate": 0.2528,
+          "profit_factor": 0.309,
+          "expectancy": -14.0533,
+          "average_win": 24.82,
+          "average_loss": -27.21,
+          "max_dd_pct": 0.5015,
+          "sharpe": -0.561,
+          "fees": 2617.94,
+          "slippage": 653.81,
+          "avg_hold_s": 16283.0,
+          "regime_counts": {
+            "HIGH_VOLATILITY": 8155,
+            "WEAK_DOWNTREND": 8412,
+            "RANGE": 4548,
+            "STRONG_DOWNTREND": 6658,
+            "LOW_VOLATILITY": 4334,
+            "WEAK_UPTREND": 6843,
+            "STRONG_UPTREND": 5829,
+            "PANIC": 22,
+            "RECOVERY": 8
+          },
+          "exit_reasons": {
+            "TRAILING_STOP": 51,
+            "STOP_LOSS": 227,
+            "TAKE_PROFIT": 78
+          },
+          "per_strategy": {
+            "trend_pullback": {
+              "trades": 356,
+              "net_pnl": -5002.9884
+            }
+          },
+          "n_rejections": 44453,
+          "top_rejections": {
+            "NO_SIGNAL": 34238,
+            "EXPECTED_EDGE_TOO_SMALL": 7348,
+            "RELATIVE_STRENGTH_FAILED": 2866,
+            "BTC_CONFIRMATION_FAILED": 1
+          },
+          "monte_carlo": {
+            "iterations": 500,
+            "starting_equity": 10000.0,
+            "mean_return": -0.48306,
+            "median_return": -0.500227,
+            "p05_return": -0.503078,
+            "p95_return": -0.425797,
+            "prob_profit": 0.0,
+            "prob_ruin": 0.54,
+            "ruin_fraction": 0.5,
+            "median_max_drawdown_pct": 0.5004,
+            "worst_max_drawdown_pct": 0.5076
+          },
+          "by_year": {
+            "2024": {
+              "trades": 173,
+              "net_pnl": -2725.76,
+              "win_rate": 0.2601,
+              "profit_factor": 0.295
+            },
+            "2025": {
+              "trades": 183,
+              "net_pnl": -2277.22,
+              "win_rate": 0.2459,
+              "profit_factor": 0.324
+            }
+          }
+        },
+        "v2_multi": {
+          "arm": "v2_multi",
+          "trades": 356,
+          "gross_pnl": -2385.03,
+          "net_pnl": -5003.0,
+          "return_pct": -50.03,
+          "cost_drag": 3271.79,
+          "win_rate": 0.2528,
+          "profit_factor": 0.309,
+          "expectancy": -14.0534,
+          "average_win": 24.82,
+          "average_loss": -27.21,
+          "max_dd_pct": 0.5015,
+          "sharpe": -0.561,
+          "fees": 2617.97,
+          "slippage": 653.82,
+          "avg_hold_s": 16294.0,
+          "regime_counts": {
+            "HIGH_VOLATILITY": 8152,
+            "WEAK_DOWNTREND": 8412,
+            "RANGE": 4548,
+            "STRONG_DOWNTREND": 6658,
+            "LOW_VOLATILITY": 4334,
+            "WEAK_UPTREND": 6842,
+            "STRONG_UPTREND": 5829,
+            "PANIC": 22,
+            "RECOVERY": 8
+          },
+          "exit_reasons": {
+            "TRAILING_STOP": 51,
+            "STOP_LOSS": 227,
+            "TAKE_PROFIT": 78
+          },
+          "per_strategy": {
+            "trend_pullback": {
+              "trades": 342,
+              "net_pnl": -4799.5786
+            },
+            "momentum": {
+              "trades": 14,
+              "net_pnl": -203.4201
+            }
+          },
+          "n_rejections": 44449,
+          "top_rejections": {
+            "NO_SIGNAL": 34234,
+            "EXPECTED_EDGE_TOO_SMALL": 7348,
+            "RELATIVE_STRENGTH_FAILED": 2866,
+            "BTC_CONFIRMATION_FAILED": 1
+          },
+          "monte_carlo": {
+            "iterations": 500,
+            "starting_equity": 10000.0,
+            "mean_return": -0.483061,
+            "median_return": -0.500228,
+            "p05_return": -0.503076,
+            "p95_return": -0.4258,
+            "prob_profit": 0.0,
+            "prob_ruin": 0.54,
+            "ruin_fraction": 0.5,
+            "median_max_drawdown_pct": 0.5004,
+            "worst_max_drawdown_pct": 0.5076
+          },
+          "by_year": {
+            "2024": {
+              "trades": 173,
+              "net_pnl": -2725.76,
+              "win_rate": 0.2601,
+              "profit_factor": 0.295
+            },
+            "2025": {
+              "trades": 183,
+              "net_pnl": -2277.23,
+              "win_rate": 0.2459,
+              "profit_factor": 0.324
+            }
+          }
+        },
+        "only_trend_pullback": {
+          "arm": "only_trend_pullback",
+          "trades": 356,
+          "gross_pnl": -2385.05,
+          "net_pnl": -5002.99,
+          "return_pct": -50.0299,
+          "cost_drag": 3271.75,
+          "win_rate": 0.2528,
+          "profit_factor": 0.309,
+          "expectancy": -14.0533,
+          "average_win": 24.82,
+          "average_loss": -27.21,
+          "max_dd_pct": 0.5015,
+          "sharpe": -0.561,
+          "fees": 2617.94,
+          "slippage": 653.81,
+          "avg_hold_s": 16283.0,
+          "regime_counts": {
+            "HIGH_VOLATILITY": 8155,
+            "WEAK_DOWNTREND": 8412,
+            "RANGE": 4548,
+            "STRONG_DOWNTREND": 6658,
+            "LOW_VOLATILITY": 4334,
+            "WEAK_UPTREND": 6843,
+            "STRONG_UPTREND": 5829,
+            "PANIC": 22,
+            "RECOVERY": 8
+          },
+          "exit_reasons": {
+            "TRAILING_STOP": 51,
+            "STOP_LOSS": 227,
+            "TAKE_PROFIT": 78
+          },
+          "per_strategy": {
+            "trend_pullback": {
+              "trades": 356,
+              "net_pnl": -5002.9884
+            }
+          },
+          "n_rejections": 44453,
+          "top_rejections": {
+            "NO_SIGNAL": 34238,
+            "EXPECTED_EDGE_TOO_SMALL": 7348,
+            "RELATIVE_STRENGTH_FAILED": 2866,
+            "BTC_CONFIRMATION_FAILED": 1
+          },
+          "monte_carlo": {
+            "iterations": 500,
+            "starting_equity": 10000.0,
+            "mean_return": -0.48306,
+            "median_return": -0.500227,
+            "p05_return": -0.503078,
+            "p95_return": -0.425797,
+            "prob_profit": 0.0,
+            "prob_ruin": 0.54,
+            "ruin_fraction": 0.5,
+            "median_max_drawdown_pct": 0.5004,
+            "worst_max_drawdown_pct": 0.5076
+          },
+          "by_year": {
+            "2024": {
+              "trades": 173,
+              "net_pnl": -2725.76,
+              "win_rate": 0.2601,
+              "profit_factor": 0.295
+            },
+            "2025": {
+              "trades": 183,
+              "net_pnl": -2277.22,
+              "win_rate": 0.2459,
+              "profit_factor": 0.324
+            }
+          }
+        },
+        "only_breakout": {
+          "arm": "only_breakout",
+          "trades": 0,
+          "gross_pnl": 0,
+          "net_pnl": 0,
+          "return_pct": 0.0,
+          "cost_drag": 0.0,
+          "win_rate": 0.0,
+          "profit_factor": 0.0,
+          "expectancy": 0.0,
+          "average_win": 0.0,
+          "average_loss": 0.0,
+          "max_dd_pct": 0.0,
+          "sharpe": 0.0,
+          "fees": 0.0,
+          "slippage": 0.0,
+          "avg_hold_s": 0.0,
+          "regime_counts": {
+            "HIGH_VOLATILITY": 34668,
+            "WEAK_DOWNTREND": 36709,
+            "RANGE": 21350,
+            "STRONG_DOWNTREND": 27934,
+            "LOW_VOLATILITY": 18499,
+            "WEAK_UPTREND": 37429,
+            "STRONG_UPTREND": 32601,
+            "PANIC": 47,
+            "RECOVERY": 23
+          },
+          "exit_reasons": {},
+          "per_strategy": {},
+          "n_rejections": 209260,
+          "top_rejections": {
+            "NO_SIGNAL": 209260
+          },
+          "monte_carlo": {
+            "iterations": 500,
+            "starting_equity": 10000.0,
+            "mean_return": 0.0,
+            "median_return": 0.0,
+            "p05_return": 0.0,
+            "p95_return": 0.0,
+            "prob_profit": 0.0,
+            "prob_ruin": 0.0,
+            "ruin_fraction": 0.5,
+            "median_max_drawdown_pct": 0.0,
+            "worst_max_drawdown_pct": 0.0
+          },
+          "by_year": {}
+        },
+        "only_mean_reversion": {
+          "arm": "only_mean_reversion",
+          "trades": 0,
+          "gross_pnl": 0,
+          "net_pnl": 0,
+          "return_pct": 0.0,
+          "cost_drag": 0.0,
+          "win_rate": 0.0,
+          "profit_factor": 0.0,
+          "expectancy": 0.0,
+          "average_win": 0.0,
+          "average_loss": 0.0,
+          "max_dd_pct": 0.0,
+          "sharpe": 0.0,
+          "fees": 0.0,
+          "slippage": 0.0,
+          "avg_hold_s": 0.0,
+          "regime_counts": {
+            "HIGH_VOLATILITY": 34668,
+            "WEAK_DOWNTREND": 36709,
+            "RANGE": 21350,
+            "STRONG_DOWNTREND": 27934,
+            "LOW_VOLATILITY": 18499,
+            "WEAK_UPTREND": 37429,
+            "STRONG_UPTREND": 32601,
+            "PANIC": 47,
+            "RECOVERY": 23
+          },
+          "exit_reasons": {},
+          "per_strategy": {},
+          "n_rejections": 209260,
+          "top_rejections": {
+            "NO_SIGNAL": 209260
+          },
+          "monte_carlo": {
+            "iterations": 500,
+            "starting_equity": 10000.0,
+            "mean_return": 0.0,
+            "median_return": 0.0,
+            "p05_return": 0.0,
+            "p95_return": 0.0,
+            "prob_profit": 0.0,
+            "prob_ruin": 0.0,
+            "ruin_fraction": 0.5,
+            "median_max_drawdown_pct": 0.0,
+            "worst_max_drawdown_pct": 0.0
+          },
+          "by_year": {}
+        },
+        "only_momentum": {
+          "arm": "only_momentum",
+          "trades": 183,
+          "gross_pnl": -1559.65,
+          "net_pnl": -3065.76,
+          "return_pct": -30.6576,
+          "cost_drag": 1882.13,
+          "win_rate": 0.235,
+          "profit_factor": 0.299,
+          "expectancy": -16.7528,
+          "average_win": 30.4,
+          "average_loss": -31.24,
+          "max_dd_pct": 0.3084,
+          "sharpe": -0.58,
+          "fees": 1506.11,
+          "slippage": 376.02,
+          "avg_hold_s": 15743.0,
+          "regime_counts": {
+            "HIGH_VOLATILITY": 34570,
+            "WEAK_DOWNTREND": 36708,
+            "RANGE": 21255,
+            "STRONG_DOWNTREND": 27934,
+            "LOW_VOLATILITY": 18316,
+            "WEAK_UPTREND": 36211,
+            "STRONG_UPTREND": 31178,
+            "PANIC": 47,
+            "RECOVERY": 23
+          },
+          "exit_reasons": {
+            "STOP_LOSS": 119,
+            "TAKE_PROFIT": 40,
+            "TRAILING_STOP": 24
+          },
+          "per_strategy": {
+            "momentum": {
+              "trades": 183,
+              "net_pnl": -3065.7598
+            }
+          },
+          "n_rejections": 206059,
+          "top_rejections": {
+            "NO_SIGNAL": 205997,
+            "EXPECTED_EDGE_TOO_SMALL": 62
+          },
+          "monte_carlo": {
+            "iterations": 500,
+            "starting_equity": 10000.0,
+            "mean_return": -0.307705,
+            "median_return": -0.307964,
+            "p05_return": -0.372298,
+            "p95_return": -0.241426,
+            "prob_profit": 0.0,
+            "prob_ruin": 0.0,
+            "ruin_fraction": 0.5,
+            "median_max_drawdown_pct": 0.3101,
+            "worst_max_drawdown_pct": 0.4093
+          },
+          "by_year": {
+            "2024": {
+              "trades": 25,
+              "net_pnl": -610.27,
+              "win_rate": 0.2,
+              "profit_factor": 0.161
+            },
+            "2025": {
+              "trades": 113,
+              "net_pnl": -1786.05,
+              "win_rate": 0.2478,
+              "profit_factor": 0.34
+            },
+            "2026": {
+              "trades": 45,
+              "net_pnl": -669.43,
+              "win_rate": 0.2222,
+              "profit_factor": 0.288
+            }
+          }
+        },
+        "only_recovery": {
+          "arm": "only_recovery",
+          "trades": 0,
+          "gross_pnl": 0,
+          "net_pnl": 0,
+          "return_pct": 0.0,
+          "cost_drag": 0.0,
+          "win_rate": 0.0,
+          "profit_factor": 0.0,
+          "expectancy": 0.0,
+          "average_win": 0.0,
+          "average_loss": 0.0,
+          "max_dd_pct": 0.0,
+          "sharpe": 0.0,
+          "fees": 0.0,
+          "slippage": 0.0,
+          "avg_hold_s": 0.0,
+          "regime_counts": {
+            "HIGH_VOLATILITY": 34668,
+            "WEAK_DOWNTREND": 36709,
+            "RANGE": 21350,
+            "STRONG_DOWNTREND": 27934,
+            "LOW_VOLATILITY": 18499,
+            "WEAK_UPTREND": 37429,
+            "STRONG_UPTREND": 32601,
+            "PANIC": 47,
+            "RECOVERY": 23
+          },
+          "exit_reasons": {},
+          "per_strategy": {},
+          "n_rejections": 209260,
+          "top_rejections": {
+            "NO_SIGNAL": 209260
+          },
+          "monte_carlo": {
+            "iterations": 500,
+            "starting_equity": 10000.0,
+            "mean_return": 0.0,
+            "median_return": 0.0,
+            "p05_return": 0.0,
+            "p95_return": 0.0,
+            "prob_profit": 0.0,
+            "prob_ruin": 0.0,
+            "ruin_fraction": 0.5,
+            "median_max_drawdown_pct": 0.0,
+            "worst_max_drawdown_pct": 0.0
+          },
+          "by_year": {}
+        },
+        "grid": {
+          "arm": "grid[M15]",
+          "trades": 36,
+          "net_pnl": -64.26,
+          "return_pct": -0.2142,
+          "base_equity": 30000.0,
+          "peak_committed": 600.0,
+          "regime_exit_flattens": 26,
+          "hard_bound_triggers": 0,
+          "per_symbol": {
+            "BTC/USD": {
+              "trades": 0,
+              "fills": 0,
+              "final_equity": 10000.0,
+              "skipped": 12948,
+              "recenters": 147
+            },
+            "ETH/USD": {
+              "trades": 3,
+              "fills": 3,
+              "final_equity": 9994.66,
+              "skipped": 12766,
+              "recenters": 632
+            },
+            "SOL/USD": {
+              "trades": 33,
+              "fills": 38,
+              "final_equity": 9941.08,
+              "skipped": 11276,
+              "recenters": 1025
+            }
+          }
+        }
+      }
+    }
+  }
+}

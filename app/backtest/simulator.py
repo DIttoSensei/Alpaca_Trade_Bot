@@ -54,6 +54,11 @@ class OpenPosition:
     entry_fee: float
     highest_price: float = 0.0
     trailing_state: str = "none"
+    # Trend-following context (daily-trend strategy): no fixed target, a wide
+    # ATR trailing stop, and a close-below-trend-SMA exit.
+    trend_mode: bool = False
+    trend_atr: float = 0.0
+    trend_sma: float = 0.0
 
     def to_record(self) -> PositionRecord:
         return PositionRecord(
@@ -145,6 +150,16 @@ class Simulator:
         fee = self.costs.taker_fee(notional)
         self.cash -= notional + fee
         direction_offset = fill - reference_price
+        meta = decision.metadata or {}
+        trend_mode = bool(meta.get("trend_mode", False))
+        # ``target_price == 0.0`` is the sentinel for "no fixed target" (trend
+        # mode). Only substitute a concrete target when one was intended.
+        if decision.target_price:
+            target_price = decision.target_price
+        elif trend_mode:
+            target_price = 0.0
+        else:
+            target_price = fill * (1 + self.risk.target_r_multiple * self.risk.min_stop_distance)
         pos = OpenPosition(
             symbol=decision.symbol,
             qty=qty,
@@ -152,7 +167,7 @@ class Simulator:
             entry_index=index,
             entry_time=timestamp,
             stop_price=decision.stop_price or fill * (1 - self.risk.max_stop_distance),
-            target_price=decision.target_price or fill * (1 + self.risk.target_r_multiple * self.risk.min_stop_distance),
+            target_price=target_price,
             initial_risk_per_unit=max(1e-12, fill - (decision.stop_price or fill)),
             strategy=decision.strategy,
             regime=decision.regime,
@@ -162,6 +177,9 @@ class Simulator:
             risk_amount=decision.risk_amount,
             entry_fee=fee,
             highest_price=fill,
+            trend_mode=trend_mode,
+            trend_atr=float(meta.get("trend_atr", 0.0) or 0.0),
+            trend_sma=float(meta.get("trend_sma", 0.0) or 0.0),
         )
         # Recompute risk per unit against the actual fill (slippage changes it).
         pos.initial_risk_per_unit = max(1e-12, fill - pos.stop_price)
@@ -183,15 +201,25 @@ class Simulator:
 
     # -- exiting ---------------------------------------------------------
     def check_bar_exits(self, symbol: str, bar: Candle) -> list[TradeRecord]:
-        """Process stop/target exits against a bar's high/low."""
+        """Process stop/target/trend exits against a bar's high/low/close."""
         pos = self.positions.get(symbol)
         if pos is None:
             return []
         pos.highest_price = max(pos.highest_price, bar.high)
 
         stop_hit = bar.low <= pos.stop_price
-        target_hit = bar.high >= pos.target_price
+        # A target of 0.0 means "no fixed target" (trend mode).
+        has_target = pos.target_price > 0
+        target_hit = has_target and bar.high >= pos.target_price
         if not stop_hit and not target_hit:
+            # Trend exit: price closes back below the trend SMA (canonical trend
+            # invalidation). Evaluated on the CLOSED bar, so no look-ahead.
+            if pos.trend_mode and pos.trend_sma > 0 and bar.close < pos.trend_sma:
+                return [
+                    self._close(
+                        pos, bar.close, ExitReason.STRATEGY_INVALIDATION, bar.timestamp, bar
+                    )
+                ]
             self._trail(pos, bar)
             return []
 
@@ -233,18 +261,28 @@ class Simulator:
             current_price=bar.close,
             initial_risk_per_unit=pos.initial_risk_per_unit,
             current_stop=pos.stop_price,
-            atr=self._atr_of(bar),
+            atr=self._atr_of(bar, pos),
             side="buy",
             already_trailing=pos.trailing_state == "trailing",
+            trend_mode=pos.trend_mode,
         )
         if new_stop > pos.stop_price:
             pos.stop_price = new_stop
             pos.trailing_state = state
 
-    @staticmethod
-    def _atr_of(bar: Candle) -> float:
-        # Bars carry no ATR; approximate from the bar range for trailing triggers.
-        return max(1e-12, (bar.high - bar.low))
+    def _atr_of(self, bar: Candle, pos: Optional[OpenPosition] = None) -> float:
+        """Volatility used for trailing, in the position's own timeframe.
+
+        Bars carry no ATR, so a single-bar range is used as a FLOOR. On the M15
+        execution timeframe that range is tiny, and trailing on it churned
+        positions out on noise -- the documented bug. We therefore (a) prefer the
+        DAILY ATR captured at entry for trend positions, and (b) floor the
+        intraday proxy at the stop distance implied by ``min_stop_distance``.
+        """
+        if pos is not None and pos.trend_mode and pos.trend_atr > 0:
+            return pos.trend_atr
+        floor = (pos.entry_price * self.risk.min_stop_distance) if pos is not None else 0.0
+        return max(floor, 1e-12, (bar.high - bar.low))
 
     def _close(
         self,

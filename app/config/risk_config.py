@@ -37,6 +37,19 @@ class RiskConfig:
     trailing_trigger_r: float = 1.5
     trailing_atr_multiplier: float = 1.0
 
+    # Trend-following exit (daily-trend strategy). A mean-reverting fixed target
+    # caps winners and destroys a trend edge, so the daily strategy requests a
+    # trailing exit with NO fixed target: it rides the trend and is stopped out
+    # only when price closes back below the trend SMA (the canonical donchian/
+    # SMA trend exit). Wide ATR trailing keeps the position through pullbacks.
+    trend_trailing_atr_multiplier: float = 3.0
+    trend_trailing_trigger_r: float = 1.0  # trail only after 1R is banked
+    trend_exit_sma_period: int = 50
+    # Nominal R-multiple used ONLY to size the expected move for the cost/edge
+    # gate; a trend trade has no fixed target price, but the filter still needs a
+    # representative horizon (stop_distance * this) to compare against costs.
+    trend_target_r_multiple: float = 6.0
+
     # Cost / edge filter (spec section 25)
     require_cost_edge: bool = True
     min_expected_edge: float = 0.010  # 1.0% net of costs
@@ -71,6 +84,7 @@ class RiskConfig:
             "mean_reversion": 0.6,
             "momentum": 1.0,
             "recovery": 0.4,
+            "trend_daily": 1.0,
         }
     )
 

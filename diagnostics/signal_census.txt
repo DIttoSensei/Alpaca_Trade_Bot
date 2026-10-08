@@ -1,0 +1,33 @@
+========================================================================================
+SIGNAL CENSUS (real H1 candles) -- why the streaming strategies don't trade
+execution bars evaluated (post-warmup): 209,230
+========================================================================================
+
+regime mix over evaluated bars:
+  WEAK_UPTREND         37,429    17.9%
+  WEAK_DOWNTREND       36,698    17.5%
+  HIGH_VOLATILITY      34,662    16.6%
+  STRONG_UPTREND       32,601    15.6%
+  STRONG_DOWNTREND     27,929    13.3%
+  RANGE                21,347    10.2%
+  LOW_VOLATILITY       18,499     8.8%
+  PANIC                    47     0.0%
+  RECOVERY                 18     0.0%
+
+ensemble non-NO_SIGNAL bars : 28,664
+ensemble ACTIONABLE bars    : 28,664
+
+strategy            eligible   raw_buy  raw_sell    passed  mean_score  max_score
+----------------------------------------------------------------------------------------
+trend_pullback        70,030    69,662         0    28,664        5.98       8.10
+breakout             109,876         0         0         0           -          -
+mean_reversion        74,508     3,422         0         0        3.93       5.10
+momentum              70,030    39,880         0         0        3.07       5.85
+recovery                  18        18         0         0        3.35       3.60
+----------------------------------------------------------------------------------------
+
+Reading: 'raw_buy' = strategy logic fired BUY when its regime was allowed;
+'passed' = raw BUY also cleared signal_threshold (6.0). If raw_buy is ~0 the
+logic never fires on real data; if raw_buy>0 but passed=0 the score gate is
+unreachable. Eligible=0 means the regime never permits the strategy at all.
+========================================================================================
